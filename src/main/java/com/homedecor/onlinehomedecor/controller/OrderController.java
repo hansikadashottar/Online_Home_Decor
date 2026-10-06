@@ -21,23 +21,18 @@ public class OrderController {
 
     // 1. PLACE ORDER
     @PostMapping
-    public ResponseEntity<String> placeOrder(
+    public ResponseEntity<OrderResponse> placeOrder(
             @Valid @RequestBody CreateOrderRequest request,
             Authentication authentication) {
 
-        // 1. Get logged-in user's email
         String email = authentication.getName();
 
-        // 2. Place order
-        orderService.placeOrder(
+        OrderResponse response = orderService.placeOrder(
                 email,
                 request
         );
 
-        // 3. Return success response
-        return ResponseEntity.ok(
-                "Order placed successfully"
-        );
+        return ResponseEntity.ok(response);
     }
 
     // 2. GET CUSTOMER ORDER HISTORY

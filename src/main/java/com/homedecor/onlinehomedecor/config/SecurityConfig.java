@@ -1,6 +1,7 @@
 package com.homedecor.onlinehomedecor.config;
 
 import com.homedecor.onlinehomedecor.security.JwtAuthenticationFilter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -12,6 +13,11 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -21,9 +27,39 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // 1. 401 - JWT missing/invalid
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:5174"
+        ));
+
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "DELETE",
+                "OPTIONS"
+        ));
+
+        configuration.setAllowedHeaders(List.of("*"));
+
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
+    }
+
     @Bean
     public AuthenticationEntryPoint authenticationEntryPoint() {
+
         return (request, response, authException) -> {
 
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
@@ -35,9 +71,9 @@ public class SecurityConfig {
         };
     }
 
-    // 2. 403 - JWT valid but role not allowed
     @Bean
     public AccessDeniedHandler accessDeniedHandler() {
+
         return (request, response, accessDeniedException) -> {
 
             response.setStatus(HttpStatus.FORBIDDEN.value());
@@ -45,7 +81,6 @@ public class SecurityConfig {
 
             String message;
 
-            // 3. PRODUCT - ADMIN ONLY
             if (request.getMethod().equals("POST")
                     && request.getServletPath().startsWith("/products")) {
 
@@ -60,10 +95,8 @@ public class SecurityConfig {
                     && request.getServletPath().startsWith("/products")) {
 
                 message = "You are not allowed to delete products";
-            }
 
-            // 4. CATEGORY - ADMIN ONLY
-            else if (request.getMethod().equals("POST")
+            } else if (request.getMethod().equals("POST")
                     && request.getServletPath().startsWith("/categories")) {
 
                 message = "You are not allowed to create categories";
@@ -98,9 +131,12 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
 
+                .cors(cors -> {})
+
                 .authorizeHttpRequests(auth -> auth
 
-                        // 5. USER - PUBLIC APIs
+                        // ================= USER =================
+
                         .requestMatchers(
                                 "/users",
                                 "/users/login",
@@ -108,57 +144,91 @@ public class SecurityConfig {
                                 "/users/reset-password"
                         ).permitAll()
 
-                        // 6. CART - CUSTOMER ONLY
+
+                        // ================= PRODUCT IMAGES =================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/images/products/**"
+                        ).permitAll()
+
+
+                        // ================= CATEGORY IMAGES =================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/images/categories/**"
+                        ).permitAll()
+
+
+                        // ================= PRODUCTS =================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/products",
+                                "/products/**"
+                        ).permitAll()
+
+
+                        // ================= CATEGORIES =================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/categories",
+                                "/categories/**"
+                        ).permitAll()
+
+
+                        // ================= CART =================
+
                         .requestMatchers(
                                 "/cart",
                                 "/cart/**"
                         ).hasRole("CUSTOMER")
 
-                        // 7. ORDER - CUSTOMER CAN PLACE ORDER
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/orders"
-                        ).hasRole("CUSTOMER")
 
-                        // 8. ORDER - ADMIN CAN VIEW ALL ORDERS
+                        // ================= ADMIN ORDERS =================
+                        // IMPORTANT:
+                        // Admin order rules must come BEFORE
+                        // the broader customer order rules.
+
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/orders/admin/all"
                         ).hasRole("ADMIN")
 
-                        // 9. ORDER - ADMIN CAN VIEW SINGLE ORDER
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/orders/admin/*"
                         ).hasRole("ADMIN")
 
-                        // 10. ORDER - ADMIN CAN UPDATE ORDER STATUS
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/orders/admin/*/status"
                         ).hasRole("ADMIN")
 
-                        // 11. ORDER - CUSTOMER CAN CANCEL OWN ORDER
+
+                        // ================= CUSTOMER ORDERS =================
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/orders"
+                        ).hasRole("CUSTOMER")
+
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/orders/*/cancel"
                         ).hasRole("CUSTOMER")
 
-                        // 12. ORDER - CUSTOMER CAN VIEW OWN ORDERS
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/orders",
-                                "/api/orders/**"
+                                "/api/orders/*"
                         ).hasRole("CUSTOMER")
 
-                        // 13. PRODUCT - CUSTOMER + ADMIN CAN VIEW
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/products",
-                                "/products/**"
-                        ).hasAnyRole("CUSTOMER", "ADMIN")
 
-                        // 14. PRODUCT - ADMIN ONLY
+                        // ================= ADMIN PRODUCTS =================
+
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/products"
@@ -174,14 +244,9 @@ public class SecurityConfig {
                                 "/products/**"
                         ).hasRole("ADMIN")
 
-                        // 15. CATEGORY - CUSTOMER + ADMIN CAN VIEW
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/categories",
-                                "/categories/**"
-                        ).hasAnyRole("CUSTOMER", "ADMIN")
 
-                        // 16. CATEGORY - ADMIN ONLY
+                        // ================= ADMIN CATEGORIES =================
+
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/categories"
@@ -196,7 +261,10 @@ public class SecurityConfig {
                                 HttpMethod.DELETE,
                                 "/categories/**"
                         ).hasRole("ADMIN")
-                        // 17. PAYMENT - CUSTOMER ONLY
+
+
+                        // ================= CUSTOMER PAYMENT =================
+
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/payments",
@@ -207,13 +275,18 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/payments/order/*"
                         ).hasRole("CUSTOMER")
-                        // 18. PAYMENT - ADMIN ONLY
+
+
+                        // ================= ADMIN PAYMENT =================
+
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/payments/admin/**"
                         ).hasRole("ADMIN")
 
-                        // 19. OTHER APIs - AUTHENTICATED USERS
+
+                        // ================= OTHER APIs =================
+
                         .anyRequest().authenticated()
                 )
 
